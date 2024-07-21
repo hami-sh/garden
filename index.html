@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seed Planting Website</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    <style>
+         body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        #seedContainer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+        }
+        .seed {
+            position: absolute;
+            width: 100px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        .seed img {
+            width: 100px;
+            height: 100px;
+            object-fit: contain;
+        }
+        .seed-info {
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 5px;
+            padding: 5px;
+            display: none;
+            z-index: 2;
+            position: relative;
+        }
+        .seed:hover .seed-info {
+            display: block;
+        }
+        #plantForm {
+            position: fixed;
+            top: 60px;
+            left: 20px;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 3;
+        }
+        input, button {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>A Garden</h1>
+    <form id="plantForm">
+        <input type="text" id="name" placeholder="Your Name" required>
+        <input type="text" id="message" placeholder="Your Message" required>
+        <button type="submit">Plant a Seed</button>
+    </form>
+    <div id="seedContainer"></div>
+
+    <script>
+        const API_URL = 'http://localhost:3000';
+        const MOUND_DAYS = 1;
+        const GROWTH_DAYS = 5;
+        const LIFE_DAYS = 10;
+
+        const seedImages = {
+            mound: 'mound.png',
+            growing: 'sapling.png',
+            tree: 'tree.png'
+        };
+
+        function calculateChecksum(str) {
+            let sum = 0;
+            for (let i = 0; i < str.length; i++) {
+                sum += str.charCodeAt(i);
+            }
+            return sum;
+        }
+
+        function positionSeed(seed) {
+            const checksum = calculateChecksum(seed.name + seed.message + seed.plantedDate);
+            const x = checksum % (window.innerWidth - 100);  // 100 is the width of the seed
+            const y = (checksum * 13) % (window.innerHeight - 100);  // 100 is the height of the seed
+            return { x, y };
+        }
+
+        async function loadSeeds() {
+            const response = await fetch(`${API_URL}/seeds`);
+            return await response.json();
+        }
+
+        async function plantSeed(name, message) {
+            const response = await fetch(`${API_URL}/seeds`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ name, message }),
+            });
+            await response.json();
+            renderSeeds();
+        }
+
+        async function renderSeeds() {
+            const seeds = await loadSeeds();
+            const container = document.getElementById('seedContainer');
+            container.innerHTML = '';
+
+            seeds.forEach((seed) => {
+                const plantedDate = moment(seed.plantedDate);
+                const now = moment();
+                const daysSincePlanted = now.diff(plantedDate, 'days');
+
+                let status, statusText;
+                if (daysSincePlanted < MOUND_DAYS) {
+                    status = 'mound';
+                    statusText = `Just planted....`;
+                } else if (daysSincePlanted < GROWTH_DAYS) {
+                    status = 'growing';
+                    statusText = `Growing (${GROWTH_DAYS - daysSincePlanted} days left)`;
+                } else if (daysSincePlanted < GROWTH_DAYS + LIFE_DAYS) {
+                    status = 'tree';
+                    statusText = `Alive (${GROWTH_DAYS + LIFE_DAYS - daysSincePlanted} days left)`;
+                } else {
+                    // skip dead 
+                    return;
+                }
+
+                const seedElement = document.createElement('div');
+                seedElement.className = `seed ${status}`;
+                const { x, y } = positionSeed(seed);
+                seedElement.style.left = `${x}px`;
+                seedElement.style.top = `${y}px`;
+                var message; 
+                if (status == 'tree') {
+                    message = seed.message;
+                } else {
+                    message = ''
+                }
+                seedElement.innerHTML = `
+                    <img src="${seedImages[status]}" alt="${status} seed">
+                    <div class="seed-info">
+                        <h3>${seed.name}'s Seed</h3>
+                        <p>${message}</p>
+                        <p>Status: ${statusText}</p>
+                        <p>Planted: ${plantedDate.format('YYYY-MM-DD')}</p>
+                    </div>
+                `;
+                container.appendChild(seedElement);
+            });
+        }
+
+        document.getElementById('plantForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('name').value;
+            const message = document.getElementById('message').value;
+            await plantSeed(name, message);
+            e.target.reset();
+        });
+
+        // Initial render and set up interval to update regularly
+        renderSeeds();
+        setInterval(renderSeeds, 60000); // Update every minute
+
+        // Reposition seeds on window resize
+        window.addEventListener('resize', renderSeeds);
+    </script>
+</body>
+</html>
